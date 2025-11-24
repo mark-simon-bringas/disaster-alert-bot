@@ -305,6 +305,11 @@ if __name__ == "__main__":
         
         if not user_input:
             continue
+        
+        # Validate input length
+        if len(user_input) > 500:
+            print("Bot: Please ask a shorter question. Maximum 500 characters.\n")
+            continue
             
         try:
             start = time.time()
@@ -312,4 +317,4 @@ if __name__ == "__main__":
             print(f"\nBot: {response}")
             print(f"\n[DEBUG] Total time: {time.time() - start:.2f}s\n")
         except Exception as e:
-            print(f"Error: {e}\n")
+            print(f"Error: Failed to generate response - {str(e)}\n")
