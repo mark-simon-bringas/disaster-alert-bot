@@ -36,14 +36,13 @@ During disasters, people often face difficulties in **accessing accurate and tim
 - NGOs focused on disaster preparedness and risk reduction  
 
 ## Tools and Technologies
-[![Mistral AI](https://img.shields.io/badge/Mistral%20AI-FA520F?logo=mistral-ai&logoColor=fff)](#) [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#) [![Ollama](https://img.shields.io/badge/Ollama-fff?logo=ollama&logoColor=000)](#)  [![LangChain](https://img.shields.io/badge/LangChain-1c3c3c.svg?logo=langchain&logoColor=white)](#) [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-FFD21E?logo=huggingface&logoColor=000)](#) [![Flask](https://img.shields.io/badge/Flask-000?logo=flask&logoColor=fff)](#) [![Sass](https://img.shields.io/badge/Sass-C69?logo=sass&logoColor=fff)](#) [![Bootstrap](https://img.shields.io/badge/Bootstrap-7952B3?logo=bootstrap&logoColor=fff)](#) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=000)](#) [![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?logo=mongodb&logoColor=white)](#) [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](#)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](#) [![Ollama](https://img.shields.io/badge/Ollama-fff?logo=ollama&logoColor=000)](#)  [![LangChain](https://img.shields.io/badge/LangChain-1c3c3c.svg?logo=langchain&logoColor=white)](#) [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-FFD21E?logo=huggingface&logoColor=000)](#) [![Flask](https://img.shields.io/badge/Flask-000?logo=flask&logoColor=fff)](#) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=000)](#) [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](#)
 | Component | Technology |
 |------------|-------------|
-| **AI Model** | Mistral (`mistral:7b`) |
+| **AI Model** | Llama 3.2 (`llama3.2:3b`) |
 | **AI Training** | Python (Ollama, Langchain, HuggingFace) |
-| **Frontend & Backend** | Python (Flask, FastAPI), Sass (Bootstrap), JavaScript |
-| **Database** | MongoDB |
-| **Weather API** | OpenWeatherMap API |
+| **Frontend & Backend** | Python (Flask, FastAPI), CSS, JavaScript |
+| **Weather API** | OpenWeatherMap API, Serper |
 | **Deployment** | Docker |
 
 ## Members
