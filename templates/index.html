@@ -142,6 +142,7 @@
                 </div>
             </div>
         </div>
+
         <div class="col-lg-3 d-none d-lg-block sidebar-right" id="sidebar-right">
             <div class="mb-4">
                 <h5 class="fw-bold mb-1">Weather Forecast</h5>
@@ -156,8 +157,7 @@
                 </div>
 
                 <div id="weather-icon-box" style="width:72px; height:72px; display:flex; align-items:center; justify-content:center;">
-                    <img id="weather-icon" src="" alt="" style="max-width:72px; max-height:72px; display:none;">
-                    <i class="bi bi-brightness-high-fill" id="weather-icon-fallback" style="font-size: 3.5rem; color: var(--tertiary-color);"></i>
+                    <i class="bi bi-brightness-high-fill" style="font-size: 3.5rem; color: var(--tertiary-color);"></i>
                 </div>
                 </div>
 
@@ -165,13 +165,22 @@
                 <span id="wind-text"><i class="bi bi-wind me-1"></i> -- km/h</span>
                 <span id="humidity-text" style="margin-left:12px;"><i class="bi bi-droplet-fill me-1"></i> --%</span>
                 </div>
+            </div>
 
-                <div id="weather-loading" style="display:none; margin-top:8px;">
-                <small class="text-muted">Updating weather…</small>
+            <h6 class="fw-bold mb-3 mt-4">PAGASA Typhoon Warning</h6>
+            <div id="pagasa-warning-container" style="margin-bottom: 20px;">
+                <div class="alert-card alert-safe">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-cloud me-3 fs-4"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1">Loading latest bulletin...</h6>
+                            <small class="text-muted">Please wait</small>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <h6 class="fw-bold mb-3" style="margin-top:18px;">5-Day Forecast</h6>
+            <h6 class="fw-bold mb-3">5-Day Forecast</h6>
             <div class="forecast-list" id="forecast-list">
                 <div class="forecast-item placeholder">
                 <div class="d-flex align-items-center">
@@ -187,4 +196,5 @@
 
 <script src="{{ url_for('static', filename='js/botReply.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weather.js') }}"></script>
+<script src="{{ url_for('static', filename='js/weatherWarning.js') }}"></script>
 {% endblock content %}
