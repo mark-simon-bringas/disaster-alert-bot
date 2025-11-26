@@ -9,6 +9,28 @@ from typing import Optional, Dict, List
 
 BASE_URL = "https://pubfiles.pagasa.dost.gov.ph/tamss/weather/bulletin/"
 
+def clean_pdf_text(raw_text):
+    # Normalize unicode punctuation
+    text = raw_text.replace("\u201c", "\"").replace("\u201d", "\"")
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = text.replace("\u2026", "...")
+    text = text.replace("\u00b0", "°")
+
+    boilerplate_patterns = [
+        r"MMSS-04 Rev\.1.*?Weather Division",
+        r"Republic of the Philippines.*?Weather Division",
+        r"DOST-PAGASA.*?(?=MMSS|\Z)",  # footer block
+        r"Page \d+ of \d+\s*Prepared by:.*?(?=MMSS|\Z)",
+        r"tracking the sky.*?Philippines",
+    ]
+
+    for pattern in boilerplate_patterns:
+        text = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE)
+
+    text = re.sub(r"\n{2,}", "\n", text)
+
+    return text.strip()
+
 def extract_tcws_impact(signal_no: int) -> str:
     impacts = {
         5: "Extreme threat to life and property",
@@ -49,6 +71,17 @@ def parse_bulletin(text: str, bulletin: str) -> Dict:
                 location_as_of = m_asof.group(1)
             break
 
+    loc_match = re.search(
+        r"(The center of.*?\([0-9.]+[°º]?\s*[NS],\s*[0-9.]+[°º]?\s*[EW]\))",
+        text,
+        flags=re.DOTALL | re.IGNORECASE
+    )
+
+    location_desc = None
+    if loc_match:
+        location_desc = loc_match.group(1).strip()
+        location_desc = " ".join(location_desc.split())
+    
     location = {
         "description": location_desc,
         "coordinates": None,
@@ -198,7 +231,8 @@ def get_latest_bulletin() -> Optional[Dict]:
         bulletin_source = BASE_URL + recent["filename"]
         
         pdf_data = download_pdf(recent["filename"])
-        pdf_text = extract_pdf_text(pdf_data)
+        raw_pdf_text = extract_pdf_text(pdf_data)
+        pdf_text = clean_pdf_text(raw_pdf_text)
         
         parsed = parse_bulletin(pdf_text, bulletin_source)
         return parsed
@@ -210,12 +244,12 @@ def get_latest_bulletin() -> Optional[Dict]:
 def get_latest_bulletin_json() -> str:
     bulletin = get_latest_bulletin()
     if bulletin:
-        return json.dumps(bulletin, indent=4)
+        return json.dumps(bulletin, indent=4, ensure_ascii=False)
     return json.dumps({"error": "No bulletin available"})
 
 if __name__ == "__main__":
     bulletin = get_latest_bulletin()
     if bulletin:
-        print(json.dumps(bulletin, indent=4))
+        print(json.dumps(bulletin, indent=4, ensure_ascii=False))
     else:
         print("ERROR: Could not fetch bulletin")
