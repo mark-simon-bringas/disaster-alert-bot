@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, render_template
-from model.rag_modelv4 import ask_question, refresh_web_data
+from model.rag_modelv6 import ask_question, refresh_web_data
+from model.services.weather_service import fetch_current_weather, fetch_forecast
+from model.services.warning_service import fetch_weather_warning
 from datetime import datetime
 import logging
 import os
@@ -113,51 +115,15 @@ def get_weather():
     city = request.args.get("city")
     if not city:
         return jsonify({"error": "Please provide a city name via ?city=..."}), 400
-    
-    if not OPENWEATHER_API_KEY:
-        return jsonify({"error": "OpenWeather API key not configured"}), 500
-    
     coords = geocode(city)
     if not coords:
-        return jsonify({"error": "Unable to geocode city. Please try a different city name."}), 400
-
+        return jsonify({"error": "Unable to geocode city."}), 400
     lat, lon, display_city = coords
-    
     try:
-        url = (
-            f"https://api.openweathermap.org/data/2.5/weather"
-            f"?lat={lat}&lon={lon}"
-            f"&appid={OPENWEATHER_API_KEY}"
-            f"&units=metric"
-        )
-        r = requests.get(url, timeout=8)
-        r.raise_for_status()
-        data = r.json()
-
-        main = data.get("main", {})
-        weather = data.get("weather", [{}])[0]
-        wind = data.get("wind", {})
-        
-        condition_main = weather.get("main", "Unknown")
-        condition_desc = weather.get("description", "").title()
-        condition_id = weather.get("id", 800)
-        
-        out = {
-            "city": city,
-            "display_city": display_city,
-            "temp": round(main.get("temp", 0)),
-            "feels_like": round(main.get("feels_like", 0)),
-            "humidity": main.get("humidity"),
-            "wind": round(wind.get("speed", 0) * 3.6, 1),
-            "condition": condition_desc,
-            "icon": get_weather_icon(condition_main, condition_id),
-            "provider": "OpenWeather",
-            "fetched_at": datetime.utcnow().isoformat() + "Z"
-        }
-        return jsonify(out), 200
-
+        weather = fetch_current_weather(lat, lon, OPENWEATHER_API_KEY)
+        weather.update({"city": city, "display_city": display_city, "provider": "OpenWeather"})
+        return jsonify(weather), 200
     except Exception as e:
-        app.logger.exception("OpenWeather current fetch failed")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/forecast", methods=["GET"])
@@ -165,137 +131,23 @@ def get_forecast():
     city = request.args.get("city")
     if not city:
         return jsonify({"error": "Please provide a city name via ?city=..."}), 400
-    
-    if not OPENWEATHER_API_KEY:
-        return jsonify({"error": "OpenWeather API key not configured"}), 500
-
     coords = geocode(city)
     if not coords:
-        return jsonify({"error": "Unable to geocode city. Please try a different city name."}), 400
-
+        return jsonify({"error": "Unable to geocode city."}), 400
     lat, lon, display_city = coords
-
     try:
-        url = (
-            f"https://api.openweathermap.org/data/2.5/forecast"
-            f"?lat={lat}&lon={lon}"
-            f"&appid={OPENWEATHER_API_KEY}"
-            f"&units=metric"
-            f"&cnt=40"
-        )
-        r = requests.get(url, timeout=8)
-        r.raise_for_status()
-        data = r.json()
-
-        forecast_list = data.get("list", [])
-        
-        daily_data: Dict[str, Dict] = {}
-        
-        for item in forecast_list:
-            dt_txt = item.get("dt_txt", "")
-            date = dt_txt.split(" ")[0]
-            
-            temp = item.get("main", {}).get("temp")
-            temp_min = item.get("main", {}).get("temp_min")
-            temp_max = item.get("main", {}).get("temp_max")
-            weather = item.get("weather", [{}])[0]
-            condition_id = weather.get("id", 800)
-            condition_main = weather.get("main", "")
-            
-            if date not in daily_data:
-                daily_data[date] = {
-                    "date": date,
-                    "temps": [],
-                    "mins": [],
-                    "maxs": [],
-                    "condition_id": condition_id,
-                    "condition_main": condition_main
-                }
-            
-            if temp is not None:
-                daily_data[date]["temps"].append(temp)
-            if temp_min is not None:
-                daily_data[date]["mins"].append(temp_min)
-            if temp_max is not None:
-                daily_data[date]["maxs"].append(temp_max)
-        
-        daily = []
-        for date in sorted(daily_data.keys())[:5]:
-            day_data = daily_data[date]
-            
-            avg_temp = round(sum(day_data["temps"]) / len(day_data["temps"])) if day_data["temps"] else None
-            min_temp = round(min(day_data["mins"])) if day_data["mins"] else None
-            max_temp = round(max(day_data["maxs"])) if day_data["maxs"] else None
-            
-            daily.append({
-                "date": date,
-                "temp": avg_temp,
-                "min": min_temp,
-                "max": max_temp,
-                "condition": day_data["condition_main"],
-                "icon": get_weather_icon(day_data["condition_main"], day_data["condition_id"])
-            })
-
-        return jsonify({"daily": daily, "display_city": display_city}), 200
-
+        forecast = fetch_forecast(lat, lon, OPENWEATHER_API_KEY)
+        forecast["display_city"] = display_city
+        return jsonify(forecast), 200
     except Exception as e:
-        app.logger.exception("OpenWeather forecast failed")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/weather_warning", methods=["GET"])
 def weather_warning():
-    from model.services.pagasa_bulletin_parser import get_latest_bulletin
-
-    try:
-        bulletin = get_latest_bulletin()
-        if not bulletin:
-            return jsonify({"error": "No PAGASA bulletin available"}), 500
-
-        # Extract fields cleanly
-        classification = bulletin.get("classification")
-        name = bulletin.get("name")
-        intensity = bulletin.get("intensity")
-        movement = bulletin.get("present_movement")
-        location = bulletin.get("location_of_center")
-        tcws_list = bulletin.get("tcws") or []
-
-        # Get highest signal
-        highest_signal = None
-        if tcws_list:
-            highest_signal = max(tcws_list, key=lambda s: s.get("signal_no", 0))
-
-        if location:
-            loc_description = location.get("description")
-            loc_as_of = location.get("as_of")
-        else:
-            loc_description = None
-            loc_as_of = None
-
-        result = {
-            "classification": classification,
-            "name": name,
-            "intensity": intensity,
-            "present_movement": movement,
-            "location": {
-                "description": loc_description,
-                "as_of": loc_as_of
-            },
-            "highest_tcws": {
-                "signal_no": highest_signal.get("signal_no") if highest_signal else None,
-                "affected_areas": highest_signal.get("affected_areas") if highest_signal else None,
-                "impact": (
-                    "Unknown" if not highest_signal
-                    else f"Signal {highest_signal['signal_no']}"
-                )
-            },
-            "source": bulletin.get("source")
-        }
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        app.logger.exception("Weather warning fetch failed")
-        return jsonify({"error": str(e)}), 500
+    result = fetch_weather_warning()
+    if not result:
+        return jsonify({"error": "No PAGASA bulletin available"}), 500
+    return jsonify(result), 200
 
 @app.errorhandler(404)
 def not_found(error):
