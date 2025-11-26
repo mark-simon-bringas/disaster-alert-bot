@@ -7,7 +7,7 @@ import logging
 import os
 import requests
 from dotenv import load_dotenv
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
