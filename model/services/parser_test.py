@@ -8,6 +8,28 @@ import re
 
 BASE_URL = "https://pubfiles.pagasa.dost.gov.ph/tamss/weather/bulletin/"
 
+def clean_pdf_text(raw_text):
+    # Normalize unicode punctuation
+    text = raw_text.replace("\u201c", "\"").replace("\u201d", "\"")
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = text.replace("\u2026", "...")
+    text = text.replace("\u00b0", "°")
+
+    boilerplate_patterns = [
+        r"MMSS-04 Rev\.1.*?Weather Division",
+        r"Republic of the Philippines.*?Weather Division",
+        r"DOST-PAGASA.*?(?=MMSS|\Z)",  # footer block
+        r"Page \d+ of \d+\s*Prepared by:.*?(?=MMSS|\Z)",
+        r"tracking the sky.*?Philippines",
+    ]
+
+    for pattern in boilerplate_patterns:
+        text = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE)
+
+    text = re.sub(r"\n{2,}", "\n", text)
+
+    return text.strip()
+
 def extract_tcws_impact(signal_no):
     impacts = {
         5: "Extreme threat to life and property",
@@ -47,6 +69,16 @@ def parse_bulletin(text, bulletin):
             if m_asof:
                 location_as_of = m_asof.group(1)
             break
+    loc_match = re.search(
+        r"(The center of.*?\([0-9.]+[°º]?\s*[NS],\s*[0-9.]+[°º]?\s*[EW]\))",
+        text,
+        flags=re.DOTALL | re.IGNORECASE
+    )
+
+    location_desc = None
+    if loc_match:
+        location_desc = loc_match.group(1).strip()
+        location_desc = " ".join(location_desc.split())
 
     location = {
         "description": location_desc,
@@ -88,39 +120,36 @@ def parse_bulletin(text, bulletin):
         text,
         re.DOTALL | re.IGNORECASE
     )
-    if not tcws_section:
-        return []
+    if tcws_section:
+        section_text = tcws_section.group(0)
+        signal_splits = re.split(r"(?<=\n)(\d+)\s+(?=[A-Z])", section_text)
+        idx = 1
+        
+        while idx < len(signal_splits):
+            signal_no = int(signal_splits[idx].strip())
+            content = signal_splits[idx + 1].strip()
 
-    section_text = tcws_section.group(0)
-    signal_splits = re.split(r"(?<=\n)(\d+)\s+(?=[A-Z])", section_text)
-    idx = 1
-    
-    while idx < len(signal_splits):
-        signal_no = int(signal_splits[idx].strip())
-        content = signal_splits[idx + 1].strip()
-
-        affected_areas = re.split(r"Warning lead time:|Range of wind speeds:|Potential impacts of winds:", content, flags=re.IGNORECASE)[0]
-        affected_areas = re.sub(r"\s+", " ", affected_areas).replace("\uf0b7", "").strip()
-        affected_areas = re.sub(r"(?<=\s)-(?=\s)|^-|-$", "", affected_areas).strip()
-        # Explicitly remove trailing "winds" if it exists
-        if affected_areas.lower().endswith(" winds"):
-            affected_areas = affected_areas[:-6].strip()
-        if affected_areas.endswith(" Wind threat:"):
+            affected_areas = re.split(r"Warning lead time:|Range of wind speeds:|Potential impacts of winds:", content, flags=re.IGNORECASE)[0]
+            affected_areas = re.sub(r"\s+", " ", affected_areas).replace("\uf0b7", "").strip()
+            affected_areas = re.sub(r"(?<=\s)-(?=\s)|^-|-$", "", affected_areas).strip()
+            if affected_areas.lower().endswith(" winds"):
+                affected_areas = affected_areas[:-6].strip()
+            if affected_areas.endswith(" Wind threat:"):
                 affected_areas = affected_areas[:-13].strip()
 
-        range_of_wind_speeds = re.search(r"Range of wind speeds:\s*(.*)", content, re.IGNORECASE)
-        potential_impacts = re.search(r"Potential impacts of winds:\s*(.*)", content, re.IGNORECASE)
-        warning_lead_time = re.search(r"Warning lead time:\s*(\d+)\s*hours", content, re.IGNORECASE)
+            range_of_wind_speeds = re.search(r"Range of wind speeds:\s*(.*)", content, re.IGNORECASE)
+            potential_impacts = re.search(r"Potential impacts of winds:\s*(.*)", content, re.IGNORECASE)
+            warning_lead_time = re.search(r"Warning lead time:\s*(\d+)\s*hours", content, re.IGNORECASE)
 
-        tcws_array.append({
-            "signal_no": signal_no,
-            "affected_areas": affected_areas,
-            "range_of_wind_speeds": range_of_wind_speeds.group(1).strip() if range_of_wind_speeds else None,
-            "potential_impacts": potential_impacts.group(1).strip() if potential_impacts else None,
-            "warning_lead_time_hours": int(warning_lead_time.group(1)) if warning_lead_time else None
-        })
+            tcws_array.append({
+                "signal_no": signal_no,
+                "affected_areas": affected_areas,
+                "range_of_wind_speeds": range_of_wind_speeds.group(1).strip() if range_of_wind_speeds else None,
+                "potential_impacts": potential_impacts.group(1).strip() if potential_impacts else None,
+                "warning_lead_time_hours": int(warning_lead_time.group(1)) if warning_lead_time else None
+            })
 
-        idx += 2
+            idx += 2
 
     return {
         "classification": classification,
@@ -202,14 +231,15 @@ def main():
 
     bulletin_source = BASE_URL + recent["filename"]
     pdf_data = download_pdf(recent["filename"]) 
-    pdf_text = extract_pdf_text(pdf_data) 
+    raw_pdf_text = extract_pdf_text(pdf_data)
+    pdf_text = clean_pdf_text(raw_pdf_text)
     
     # Parse bulletin into structured JSON 
     parsed = parse_bulletin(pdf_text, bulletin_source) 
     
     # Print JSON 
     print("\n=== PARSED BULLETIN JSON ===")
-    print(json.dumps(parsed, indent=4))
+    print(json.dumps(parsed, indent=4, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
