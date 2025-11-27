@@ -9,7 +9,7 @@ from langchain_ollama import OllamaLLM
 from langchain_core.documents import Document
 from .services.data_scrape import fetch_disaster_data
 from .services.serper_service import retrieve_realtime_docs
-import re
+from .contexts.context_keywords import CURRENT_INFO_KEYWORDS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PDF_FILE = "DisasteAlertBot_Data_v1.pdf"
@@ -20,11 +20,6 @@ os.makedirs(DB_DIR, exist_ok=True)
 MAX_HISTORY_LENGTH = 5
 TOP_K_CHUNKS = 5
 user_sessions: Dict[str, deque] = {}
-
-CURRENT_INFO_KEYWORDS = [
-    "current", "now", "today", "latest", "recent", "active", "present",
-    "kasalukuyan", "ngayon", "bagong", "kamakailan"
-]
 
 def needs_real_time_info(question: str) -> bool:
     question_lower = question.lower()

@@ -1,62 +1,18 @@
 import os
 import requests
-from typing import List
+from typing import List, Optional
 from langchain_core.documents import Document
 from dotenv import load_dotenv
+from model.contexts.context_keywords import LOCATION_KEYWORDS
+from .ph_data import CURRENT_INFO_CATEGORIES
 
 load_dotenv()
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
-CURRENT_INFO_CATEGORIES = {
-    "current_weather": [
-        "current weather", "lagay ng panahon", "ngayon", "kasalukuyan",
-        "weather now", "temperature now", "current temperature", "weather update",
-        "pag-ulan", "ulan ngayon", "ulan na", "init ngayon", "bagyo ngayon"
-    ],
-    "current_forecast": [
-        "forecast", "tuloy na lagay ng panahon", "prediction",
-        "weather forecast", "next days weather", "upcoming weather", "pag-forecast",
-        "panahon sa mga susunod na araw"
-    ],
-    "current_earthquake": [
-        "earthquake now", "lindol", "recent quake", "kasalukuyang lindol",
-        "aftershock", "tremor", "lindol ngayon", "lindol sa ph"
-    ],
-    "current_tsunami": [
-        "tsunami alert", "current tsunami", "pag-ula", "storm surge",
-        "high tide warning", "wave alert", "babala sa tsunami", "storm surge alert"
-    ],
-    "current_volcano": [
-        "volcano warning", "phivolcs", "bulkang aktibo",
-        "volcano alert", "eruption alert", "volcanic activity", "pagputok ng bulkan",
-        "phivolcs warning", "active volcano"
-    ],
-    "current_flood_storm": [
-        "flood warning", "storm surge", "flash flood", "gale warning",
-        "heavy rain", "ulan na malakas", "river overflow", "babala sa baha",
-        "strong wind", "storm warning", "bagyong paparating", "storm surge alert"
-    ],
-    "current_wildfire": [
-        "wildfire", "forest fire", "sunog", "grass fire", "bushfire",
-        "fire outbreak", "kalat na sunog", "sunog sa kagubatan"
-    ],
-    "current_man_made": [
-        "accident", "fire incident", "man-made disaster", "traffic incident",
-        "chemical spill", "industrial accident", "hazardous event",
-        "road accident", "train crash", "factory fire", "oil spill", "panggawaang aksidente"
-    ],
-    "current_disaster_news": [
-        "latest disaster news", "disaster update", "breaking news",
-        "recent disasters", "latest calamities", "disaster headlines",
-        "news update on disasters", "bagong balita ng sakuna"
-    ],
-    "disaster_agency_info": [
-        "ndrrmc", "pagasa", "phivolcs", "department of disaster", "official",
-        "government disaster agencies", "ndrrmc update", "pagasa bulletin",
-        "phivolcs advisory", "disaster preparedness officials",
-        "chief of ndrrmc", "secretary of disaster", "head of pagasa", "local disaster office"
-    ]
-}
+
+def has_location_reference(question: str) -> bool:
+    q_lower = question.lower()
+    return any(keyword in q_lower for keyword in LOCATION_KEYWORDS)
 
 def fetch_serper_results(query: str, max_results: int = 5) -> List[Document]:
     if not SERPER_API_KEY:
@@ -140,37 +96,81 @@ def classify_real_time_query(question: str) -> str:
                 return category
     return "general_current"
 
-def retrieve_realtime_docs(question: str) -> list:
-    """
-    Calls SERPER with a reinforced context based on the query category.
-    """
-    category = classify_real_time_query(question)
-    print(f"[REINFORCED] Detected category: {category}")
-
-    # Value to fetch for common and uncommon categories
-    common_occur, uncommon_occur = 5, 3
-
-    if category == "current_weather":
-        return fetch_serper_results(f"current weather Philippines PAGASA", max_results=common_occur)
-    elif category == "current_forecast":
-        return fetch_serper_results(f"current weather forecast Philippines PAGASA", max_results=common_occur)
-    elif category == "current_earthquake":
-        return fetch_serper_results(f"current earthquake Philippines PHIVOLCS", max_results=common_occur)
-    elif category == "current_tsunami":
-        return fetch_serper_results(f"current tsunami warning Philippines PAGASA", max_results=common_occur)
-    elif category == "current_volcano":
-        return fetch_serper_results(f"current volcano activity Philippines PHIVOLCS", max_results=uncommon_occur)
-    elif category == "current_flood_storm":
-        return fetch_serper_results(f"current flood storm surge gale warnings Philippines PAGASA", max_results=common_occur)
-    elif category == "current_wildfire":
-        return fetch_serper_results(f"current wildfire Philippines", max_results=uncommon_occur)
-    elif category == "current_man_made":
-        return fetch_serper_results(f"current man-made disasters Philippines", max_results=uncommon_occur)
-    elif category == "current_disaster_news":
-        return fetch_serper_results(f"latest disaster news Philippines NDRRMC PAGASA", max_results=common_occur)
-    elif category == "disaster_agency_info":
-        return fetch_serper_results(f"disaster preparedness government officials agencies Philippines", max_results=common_occur)
-    # fallback general search
+def extract_location_from_context(user_location: Optional[str]) -> str:
+    if not user_location:
+        return "Philippines"
+    
+    if "," in user_location:
+        city = user_location.split(",")[0].strip()
     else:
-        return fetch_serper_results(f"{question} Philippines", max_results=common_occur)
+        city = user_location.strip()
+    
+    return f"{city}, Philippines"
 
+def retrieve_realtime_docs(question: str, user_location: Optional[str] = None) -> list:
+    category = classify_real_time_query(question)
+    has_loc_ref = has_location_reference(question)
+    
+    location_context = extract_location_from_context(user_location)
+    
+    if has_loc_ref:
+        print(f"[SERPER] Location reference detected! Using: {location_context}")
+    else:
+        print(f"[SERPER] No location reference. Default: {location_context}")
+    
+    print(f"[SERPER] Query category: {category}")
+    
+    common_occur, uncommon_occur = 5, 3
+    
+    if category == "current_weather":
+        if has_loc_ref:
+            return fetch_serper_results(f"current weather {location_context} PAGASA", max_results=common_occur)
+        return fetch_serper_results(f"current weather Philippines PAGASA", max_results=common_occur)
+    
+    elif category == "current_forecast":
+        if has_loc_ref:
+            return fetch_serper_results(f"weather forecast {location_context} PAGASA", max_results=common_occur)
+        return fetch_serper_results(f"weather forecast Philippines PAGASA", max_results=common_occur)
+    
+    elif category == "current_earthquake":
+        if has_loc_ref:
+            return fetch_serper_results(f"earthquake {location_context} PHIVOLCS", max_results=common_occur)
+        return fetch_serper_results(f"current earthquake Philippines PHIVOLCS", max_results=common_occur)
+    
+    elif category == "current_tsunami":
+        if has_loc_ref:
+            return fetch_serper_results(f"tsunami warning {location_context} PAGASA", max_results=common_occur)
+        return fetch_serper_results(f"tsunami warning Philippines PAGASA", max_results=common_occur)
+    
+    elif category == "current_volcano":
+        if has_loc_ref:
+            return fetch_serper_results(f"volcano activity near {location_context} PHIVOLCS", max_results=uncommon_occur)
+        return fetch_serper_results(f"volcano activity Philippines PHIVOLCS", max_results=uncommon_occur)
+    
+    elif category == "current_flood_storm":
+        if has_loc_ref:
+            return fetch_serper_results(f"flood storm warnings {location_context} PAGASA", max_results=common_occur)
+        return fetch_serper_results(f"flood storm warnings Philippines PAGASA", max_results=common_occur)
+    
+    elif category == "current_wildfire":
+        if has_loc_ref:
+            return fetch_serper_results(f"wildfire {location_context}", max_results=uncommon_occur)
+        return fetch_serper_results(f"wildfire Philippines", max_results=uncommon_occur)
+    
+    elif category == "current_man_made":
+        if has_loc_ref:
+            return fetch_serper_results(f"accidents disasters {location_context}", max_results=uncommon_occur)
+        return fetch_serper_results(f"man-made disasters Philippines", max_results=uncommon_occur)
+    
+    elif category == "current_disaster_news":
+        if has_loc_ref:
+            return fetch_serper_results(f"latest disaster news {location_context} NDRRMC", max_results=common_occur)
+        return fetch_serper_results(f"latest disaster news Philippines NDRRMC PAGASA", max_results=common_occur)
+    
+    elif category == "disaster_agency_info":
+        return fetch_serper_results(f"disaster preparedness agencies Philippines", max_results=common_occur)
+    
+    else:
+        if has_loc_ref:
+            return fetch_serper_results(f"{question} {location_context}", max_results=common_occur)
+        return fetch_serper_results(f"{question} Philippines", max_results=common_occur)
