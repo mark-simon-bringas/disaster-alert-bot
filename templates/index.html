@@ -14,26 +14,6 @@
     </div>
 </div>
 
-<div id="mobile-location-dropdown" class="location-dropdown-menu" style="top: 60px; left: 15px; width: calc(100% - 30px);">
-    <div class="location-option" onclick="updateLocation('Manila')">Manila</div>
-    <div class="location-option" onclick="updateLocation('Cebu City')">Cebu City</div>
-    <div class="location-option" onclick="updateLocation('Davao City')">Davao City</div>
-    <div class="location-option" onclick="updateLocation('Baguio City')">Baguio City</div>
-</div>
-
-<div id="mobile-profile-dropdown" class="profile-dropdown-menu">
-    <div class="profile-header-info">
-        <div class="d-flex align-items-center mb-2">
-            <div class="avatar-circle me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">U</div>
-            <strong>User</strong>
-        </div>
-        <small>user_test@gmail.com</small>
-    </div>
-    <div class="profile-option sign-out-option" onclick="alert('Signing out...')">
-        <i class="bi bi-box-arrow-right me-2"></i> Sign Out
-    </div>
-</div>
-
 <div class="container-fluid h-100 p-0">
     <div class="row g-0 h-100" id="main-row">
         
@@ -45,21 +25,23 @@
 
             <div class="mb-4 position-relative">
                 <label class="section-label">LOCATION</label>
+
                 <div class="d-flex align-items-center custom-select" id="desktop-location-trigger">
                     <div class="d-flex align-items-center flex-grow-1">
                         <i class="bi bi-geo-alt text-primary me-2"></i>
-                        <span class="fw-medium" id="desktop-location-text">Baguio City</span>
+                        <span class="fw-medium" id="desktop-location-text">Manila, Philippines</span>
                     </div>
-                    <i class="bi bi-chevron-down text-secondary"></i>
                 </div>
-                
-                <div id="desktop-location-dropdown" class="location-dropdown-menu">
-                    <!-- Removed "Use Current Location" option per request -->
-                    <div class="location-option" onclick="updateLocation('Manila')">Manila</div>
-                    <div class="location-option" onclick="updateLocation('Cebu City')">Cebu City</div>
-                    <div class="location-option" onclick="updateLocation('Davao City')">Davao City</div>
-                    <div class="location-option" onclick="updateLocation('Baguio City')">Baguio City</div>
-                </div>
+
+                <input 
+                    type="text" 
+                    id="location-search-input"
+                    class="form-control mt-2"
+                    placeholder="Search city or municipality..."
+                    autocomplete="off"
+                >
+
+                <div id="location-autocomplete" class="location-dropdown-menu"></div>
             </div>
 
             <div class="mb-4 overflow-auto flex-grow-1">

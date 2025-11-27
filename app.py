@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from model.rag_modelv6 import ask_question, refresh_web_data
 from model.services.weather_service import fetch_current_weather, fetch_forecast
 from model.services.warning_service import fetch_weather_warning
+from model.services.ph_data import PH_CITIES_MUNICIPALITIES
 from datetime import datetime
 import logging
 import os
@@ -24,10 +25,18 @@ logger = logging.getLogger(__name__)
 def inject_now():
     return {'now': datetime.now()}
 
+@app.route("/api/cities")
+def get_cities():
+    js_ready = {
+        city: f"{city}, Philippines"
+        for city, meta in PH_CITIES_MUNICIPALITIES.items()
+    }
+    return jsonify(js_ready)
+
 def geocode(city_name: str) -> Optional[Tuple[float, float, str]]:
     try:
         if OPENWEATHER_API_KEY:
-            url = f"http://api.openweathermap.org/geo/1.0/direct?q={requests.utils.requote_uri(city_name)},PH&limit=1&appid={OPENWEATHER_API_KEY}"
+            url = f"http://api.openweathermap.org/geo/1.0/direct?q={requests.utils.requote_uri(city_name)}&limit=1&appid={OPENWEATHER_API_KEY}"
             r = requests.get(url, timeout=6)
             arr = r.json()
             if isinstance(arr, list) and len(arr) > 0:

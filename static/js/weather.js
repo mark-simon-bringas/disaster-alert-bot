@@ -7,10 +7,75 @@
     mobile: el('#mobile-location-text'),
   };
 
+  let PH_CITIES = {};
+  async function loadPHCities() {
+      try {
+          const res = await fetch("/api/cities");
+          PH_CITIES = await res.json();
+          console.log("Loaded PH city list:", Object.keys(PH_CITIES).length);
+      } catch (e) {
+          console.error("Failed to load PH cities", e);
+      }
+  }
+  loadPHCities();
+
+  const searchInput = document.getElementById("location-search-input");
+  const autocompleteBox = document.getElementById("location-autocomplete");
+  const locationText = document.getElementById("desktop-location-text");
+
+  function renderSuggestions(query) {
+      const normalized = query.toLowerCase();
+      autocompleteBox.innerHTML = "";
+
+      if (!normalized) {
+          autocompleteBox.style.display = "none";
+          return;
+      }
+
+      const matches = Object.keys(PH_CITIES).filter(city =>
+          city.toLowerCase().includes(normalized)
+      );
+
+      if (matches.length === 0) {
+          autocompleteBox.style.display = "none";
+          return;
+      }
+
+      autocompleteBox.style.display = "block";
+
+      matches.forEach(city => {
+          const fullDisplay = PH_CITIES[city]; // "City, Philippines"
+          const div = document.createElement("div");
+          div.className = "location-option";
+          div.textContent = fullDisplay;
+
+          div.onclick = () => {
+              updateLocation(fullDisplay);
+              locationText.textContent = fullDisplay;
+              autocompleteBox.style.display = "none";
+              searchInput.value = "";
+          };
+
+          autocompleteBox.appendChild(div);
+      });
+  }
+
+  if (searchInput) {
+      searchInput.addEventListener("input", () => {
+          renderSuggestions(searchInput.value);
+      });
+  }
+
+  document.addEventListener("click", (e) => {
+      if (!autocompleteBox.contains(e.target) && e.target !== searchInput) {
+          autocompleteBox.style.display = "none";
+      }
+  });
+
   function getSelectedCity() {
     return (locationTextEls.desktop && locationTextEls.desktop.innerText.trim()) ||
            (locationTextEls.mobile && locationTextEls.mobile.innerText.trim()) ||
-           'Baguio City';
+           'Manila, Philippines';
   }
 
   async function fetchJSON(url) {
