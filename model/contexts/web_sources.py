@@ -22,7 +22,8 @@ WEB_SOURCES = [
     #"https://www.suyoilocossur.gov.ph/reminders-what-to-do-before-during-and-after-landslides/",
 
     # Tsunami Preparedness
-    "https://www.phivolcs.dost.gov.ph/introduction-to-tsunami/",
+    # NOTE: Commented out to avoid getting IP blocked by PHIVOLCS :p
+    # "https://www.phivolcs.dost.gov.ph/introduction-to-tsunami/",
     "https://www.ready.gov/tsunamis",
     "https://www.ready.gov/tl/tsunamis",
     #"https://uwiseismic.com/tsunamis/preparedness/",
