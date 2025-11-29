@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from model.rag_modelv6 import ask_question, refresh_web_data
 from model.services.weather_service import fetch_current_weather, fetch_forecast
 from model.services.warning_service import fetch_weather_warning
-from model.services.ph_data import PH_CITIES_MUNICIPALITIES
+from model.contexts.ph_locations import PH_CITIES_MUNICIPALITIES, HARDCODED_LOCATIONS
 from datetime import datetime
 import logging
 import os
@@ -34,6 +34,12 @@ def get_cities():
     return jsonify(js_ready)
 
 def geocode(city_name: str) -> Optional[Tuple[float, float, str]]:
+    clean_name = city_name.replace(", Philippines", "").strip()
+    
+    if clean_name in HARDCODED_LOCATIONS:
+        print(f"[GEOCODE] Using hardcoded location for: {clean_name}")
+        return HARDCODED_LOCATIONS[clean_name]
+    
     try:
         if OPENWEATHER_API_KEY:
             url = f"http://api.openweathermap.org/geo/1.0/direct?q={requests.utils.requote_uri(city_name)}&limit=1&appid={OPENWEATHER_API_KEY}"

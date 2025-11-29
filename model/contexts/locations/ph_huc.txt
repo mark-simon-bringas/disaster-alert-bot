@@ -1,0 +1,33 @@
+Angeles
+Bacolod
+Baguio
+Butuan
+Cagayan de Oro
+Caloocan
+Cebu City
+Davao City
+General Santos
+Iligan
+Iloilo City
+Lapu-Lapu
+Las Piñas
+Lucena
+Makati
+Malabon
+Mandaluyong
+Mandaue
+Manila
+Marikina
+Muntinlupa
+Navotas
+Olongapo
+Parañaque
+Pasay
+Pasig
+Puerto Princesa
+Quezon City
+San Juan
+Tacloban
+Taguig
+Valenzuela
+Zamboanga City

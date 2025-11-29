@@ -4,7 +4,7 @@ from typing import List, Optional
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 from model.contexts.context_keywords import LOCATION_KEYWORDS
-from .ph_data import CURRENT_INFO_CATEGORIES
+from model.contexts.ph_categories import CURRENT_INFO_CATEGORIES
 
 load_dotenv()
 
