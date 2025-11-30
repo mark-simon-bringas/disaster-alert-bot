@@ -1,7 +1,7 @@
 import re
-import json
+import urllib.request
+import ssl
 from bs4 import BeautifulSoup
-from datetime import datetime
 
 def parse_earthquake_html(html_content):
     ROMAN_TO_INT = {
@@ -58,25 +58,30 @@ def parse_earthquake_html(html_content):
         if row:
             row_text = row.get_text()
             
+            # Date/Time
             if 'Date/Time' in row_text and result["date"] is None:
                 match = re.search(r'(\d{1,2}\s+\w+\s+\d{4})\s*-\s*(.+)', text)
                 if match:
                     result["date"] = match.group(1).strip()
                     result["time"] = match.group(2).strip()
             
+            # Location
             elif 'Location' in row_text and result["location"] is None:
                 result["location"] = text
             
+            # Depth of Focus
             elif re.search(r'Depth\s+of\s+Focus', row_text) and result["depth_of_focus"] is None:
                 depth = text.strip().lstrip('0') or '0'
                 result["depth_of_focus"] = f"{depth} km"
             
+            # Issued On
             elif re.search(r'Issued\s+On', row_text) and result["issued_on"] is None:
                 result["issued_on"] = text.strip()
             
             elif 'Expecting Aftershocks' in row_text and result["aftershock"] is None:
                 result["aftershock"] = text.strip().upper() == "YES"
     
+    # Magnitude
     font_tags = soup.find_all('font', color="#0000FF")
     for font in font_tags:
         text = font.get_text(strip=True)
@@ -88,6 +93,7 @@ def parse_earthquake_html(html_content):
     
     all_text = soup.get_text()
     
+    # Reported Intensities
     intensity_match = re.search(
         r'Reported\s+Intensities\s*:\s*(.*?)(?=Instrumental\s+Intensities:|Expecting\s+Damage|Expecting\s+Aftershocks|Issued\s+On|Prepared\s+by|IMPORTANT|$)', 
         all_text, 
@@ -102,6 +108,7 @@ def parse_earthquake_html(html_content):
         result["reported_intensities_raw"] = reported if reported else None
         result["reported_intensities"] = parse_intensity_string(reported)
     
+    # Instrumental Intensities
     instrumental_match = re.search(
         r'Instrumental\s+Intensities:\s*(.*?)(?=Expecting\s+Damage|Expecting\s+Aftershocks|Issued\s+On|Prepared\s+by|IMPORTANT|$)', 
         all_text, 
@@ -149,7 +156,7 @@ def get_latest_significant_earthquake(main_page_html, base_url="https://earthqua
         if magnitude is not None and magnitude >= 4.0:
             href = link.get('href')
             datetime_text = first_cell.get_text(strip=True)
-            print(f"✓ Found earthquake >= 4.0: {datetime_text} (Magnitude: {magnitude})")
+            print(f"Found earthquake >= 4.0: {datetime_text} (Magnitude: {magnitude})")
             
             if not href.startswith('http'):
                 href = href.replace('\\', '/')
@@ -163,9 +170,6 @@ def get_latest_significant_earthquake(main_page_html, base_url="https://earthqua
 
 def fetch_and_parse_latest_earthquake(main_page_url="https://earthquake.phivolcs.dost.gov.ph/"):
     try:
-        import urllib.request
-        import ssl
-        
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
