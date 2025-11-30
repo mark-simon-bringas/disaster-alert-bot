@@ -1,18 +1,10 @@
 import re
 import json
+import urllib.request
+import ssl
 from bs4 import BeautifulSoup
-from datetime import datetime
 
 def parse_earthquake_html(html_content):
-    """
-    Parse PHIVOLCS earthquake information HTML and extract key data.
-    
-    Args:
-        html_content: HTML string content of the earthquake information page
-    
-    Returns:
-        dict: Parsed earthquake data
-    """
     ROMAN_TO_INT = {
         'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
         'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10
@@ -20,11 +12,6 @@ def parse_earthquake_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     
     def parse_intensity_string(intensity_str):
-        """
-        Parse intensity string into structured array.
-        Example: "Intensity IV- Place1, Place2 Intensity III- Place3"
-        Returns: [{"intensity": 4, "places": "Place1, Place2"}, ...]
-        """
         if not intensity_str:
             return None
         
@@ -131,12 +118,7 @@ def parse_earthquake_html(html_content):
     
     return result
 
-
 def get_latest_significant_earthquake(main_page_html, base_url="https://earthquake.phivolcs.dost.gov.ph/", debug=False):
-    """
-    Parse the main PHIVOLCS earthquake page to find the most recent
-    earthquake with magnitude >= 4.0 and return its information URL.
-    """
     soup = BeautifulSoup(main_page_html, 'html.parser')
     all_rows = soup.find_all('tr')
     
@@ -156,18 +138,14 @@ def get_latest_significant_earthquake(main_page_html, base_url="https://earthqua
             continue
         
         magnitude = None
-        for cell_idx, cell in enumerate(cells):
-            cell_text = cell.get_text(strip=True)
-            mag_match = re.match(r"^(\d+\.?\d*)$", cell_text)
-            if mag_match:
-                try:
-                    magnitude = float(mag_match.group(1))
-                    if debug:
-                        datetime_text = first_cell.get_text(strip=True)
-                        print(f"Row {row_idx}: {datetime_text} - Magnitude: {magnitude}")
-                    break
-                except ValueError:
-                    continue
+        try:
+            mag_text = cells[4].get_text(strip=True)
+            magnitude = float(mag_text)
+            if debug:
+                datetime_text = first_cell.get_text(strip=True)
+                print(f"Row {row_idx}: {datetime_text} - Magnitude: {magnitude}")
+        except:
+            pass
         
         if magnitude is not None and magnitude >= 4.0:
             href = link.get('href')
@@ -184,12 +162,7 @@ def get_latest_significant_earthquake(main_page_html, base_url="https://earthqua
     
     return None
 
-
 def fetch_and_parse_latest_earthquake(main_page_url="https://earthquake.phivolcs.dost.gov.ph/"):
-    """
-    Fetch the main PHIVOLCS page, find the latest significant earthquake,
-    fetch its detailed information, and parse it.
-    """
     try:
         import urllib.request
         import ssl
@@ -225,6 +198,7 @@ def fetch_and_parse_latest_earthquake(main_page_url="https://earthquake.phivolcs
         traceback.print_exc()
         return None
 
+def get_latest_earthquake_information() -> str:
 
 if __name__ == "__main__":
     import sys
