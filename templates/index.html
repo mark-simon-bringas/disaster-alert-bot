@@ -142,7 +142,20 @@
                     <div class="d-flex align-items-start">
                         <i class="bi bi-cloud me-3 fs-4"></i>
                         <div>
-                            <h6 class="fw-bold mb-1">Loading latest bulletin...</h6>
+                            <h6 class="fw-bold mb-1">Loading latest tropical cyclone bulletin from PAGASA...</h6>
+                            <small class="text-muted">Please wait</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="fw-bold mb-3 mt-4">PHIVOLCS Earthquake Warning</h6>
+            <div id="phivolcs-warning-container" style="margin-bottom: 20px;">
+                <div class="alert-card alert-safe">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-activity me-3 fs-4"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1">Loading latest earthquake earthquake information from PHIVOLCS...</h6>
                             <small class="text-muted">Please wait</small>
                         </div>
                     </div>
@@ -166,4 +179,5 @@
 <script src="{{ url_for('static', filename='js/botReply.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weather.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weatherWarning.js') }}"></script>
+<script src="{{ url_for('static', filename='js/earthquakeWarning.js') }}"></script>
 {% endblock content %}

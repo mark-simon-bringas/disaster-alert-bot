@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from model.rag_modelv6 import ask_question, refresh_web_data
 from model.services.weather_service import fetch_current_weather, fetch_forecast
 from model.services.warning_service import fetch_weather_warning
+from model.services.phivolcs_earthquake_parser import fetch_and_parse_latest_earthquake
 from model.contexts.ph_locations import PH_CITIES_MUNICIPALITIES, HARDCODED_LOCATIONS
 from datetime import datetime
 import logging
@@ -163,6 +164,18 @@ def weather_warning():
     if not result:
         return jsonify({"error": "No PAGASA bulletin available"}), 500
     return jsonify(result), 200
+
+@app.route("/earthquake_warning", methods=["GET"])
+def earthquake_warning():
+    earthquake_data = fetch_and_parse_latest_earthquake()
+
+    if not earthquake_data:
+        return jsonify({"error": "No significant earthquake data available"}), 500
+    
+    return jsonify({
+        "success": True,
+        "data": earthquake_data
+    }), 200
 
 @app.errorhandler(404)
 def not_found(error):
