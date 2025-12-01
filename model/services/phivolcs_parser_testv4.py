@@ -198,8 +198,6 @@ def fetch_and_parse_latest_earthquake(main_page_url="https://earthquake.phivolcs
         traceback.print_exc()
         return None
 
-def get_latest_earthquake_information() -> str:
-
 if __name__ == "__main__":
     import sys
     
@@ -217,7 +215,7 @@ if __name__ == "__main__":
         
         if earthquake_data:
             print("\n" + "="*50)
-            print("LATEST SIGNIFICANT EARTHQUAKE (Magnitude >= 4.0)")
+            print("LATEST SIGNIFICANT EARTHQUAKE")
             print("="*50)
             print(json.dumps(earthquake_data, indent=2, ensure_ascii=False))
         else:

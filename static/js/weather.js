@@ -184,4 +184,7 @@
     loadForecast(city);
   });
 
+  // expose for accessibility in other scripts
+  window.getSelectedCity = getSelectedCity;
+
 })();
