@@ -299,6 +299,10 @@ body {
 .profile-option:hover { background-color: var(--grey-light); }
 .profile-option.sign-out-option { color: #dc3545; font-weight: 500; }
 
+#desktop-location-trigger {
+    cursor: default;
+}
+
 /* 6. Chat Area (Main, Messages, Input) */
 .chat-main {
     background-color: var(--white-color);
