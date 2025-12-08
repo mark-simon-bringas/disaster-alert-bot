@@ -485,12 +485,52 @@ def retrieve_data(question: str, user_location: Optional[str] = None, k: int = 5
         print(f"[RETRIEVAL] Retrieved: {len(serper_docs or [])} serper + {len(service_docs)} service + {len(pdf_docs)} pdf")
         return combined_docs, "comprehensive"
 
-def ask_question(question: str, user_location: Optional[str] = None) -> str:
+user_sessions = {}   # {session_id: {"topic": str, "history": deque}}
+MAX_TOPIC_HISTORY = 3
+
+def detect_topic(question: str) -> str:
+    q = question.lower()
+    if any(w in q for w in ["typhoon", "bagyo", "tropical cyclone", "storm", "tcws"]):
+        return "typhoon"
+    if any(w in q for w in ["earthquake", "lindol", "tremor", "aftershock", "quake"]):
+        return "earthquake"
+    if any(w in q for w in ["weather", "panahon", "temperature", "rain", "ulan", "forecast"]):
+        return "weather"
+    return "general"
+
+def get_session(session_id: str):
+    if session_id not in user_sessions:
+        user_sessions[session_id] = {"topic": None, "history": deque(maxlen=MAX_TOPIC_HISTORY)}
+    return user_sessions[session_id]
+
+def ask_question(question: str, user_location: Optional[str] = None, session_id: str = "default") -> str:
     print(f"\n[QUERY] User asked: {question}")
     if user_location:
         print(f"[QUERY] User location: {user_location}")
     
-    # Fresh context for each reload
+    session = get_session(session_id)
+    new_topic = detect_topic(question)
+    old_topic = session["topic"]
+
+    print(f"[TOPIC] Previous topic: {old_topic}, New topic: {new_topic}")
+
+    # If topic changes → clear chat history
+    if old_topic is not None and new_topic != old_topic:
+        print("[TOPIC] Topic changed — clearing chat history.")
+        session["history"].clear()
+
+    # Update stored topic
+    session["topic"] = new_topic
+
+    # Reconstruct chat history text
+    history_text = ""
+    if session["history"]:
+        print(f"[CHAT HISTORY] Using {len(session['history'])} past exchanges")
+        for q, a in session["history"]:
+            history_text += f"User: {q}\nBot: {a}\n"
+    else:
+        print("[CHAT HISTORY] No previous history for this topic")
+
     docs, strategy = retrieve_data(question, user_location=user_location, k=TOP_K_CHUNKS)
     print(f"[CONTEXT] Building context from {len(docs)} documents (strategy: {strategy})")
     
@@ -523,6 +563,9 @@ def ask_question(question: str, user_location: Optional[str] = None) -> str:
     answer = result.generations[0][0].text.strip()
     
     print(f"[RESPONSE] Generated answer ({len(answer)} chars)\n")
+    
+    session["history"].append((question, answer))
+    print(f"[CHAT HISTORY] Updated for topic '{new_topic}'\n")
     
     return answer
 

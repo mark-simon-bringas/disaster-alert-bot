@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template
-from model.rag_modelv7 import ask_question, refresh_web_data
+from model.rag_modelv9 import ask_question, refresh_web_data
 from model.services.weather_service import fetch_current_weather, fetch_forecast
 from model.services.warning_service import fetch_weather_warning
 from model.services.phivolcs_earthquake_parser import fetch_and_parse_latest_earthquake
