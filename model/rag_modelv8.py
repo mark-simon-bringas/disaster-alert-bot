@@ -1,14 +1,12 @@
-"""
-    NOTE: Still in development. Will use if deadline is not on 12-02-2025.
-"""
-
 import os
 from .services.data_scrape import fetch_disaster_data
 from .services.serper_service import retrieve_realtime_docs
 from .services.weather_service import fetch_current_weather, fetch_forecast
 from .services.warning_service import fetch_weather_warning
 from .services.phivolcs_earthquake_parser import fetch_and_parse_latest_earthquake
-from .contexts.context_keywords import CURRENT_INFO_KEYWORDS, LOCATION_KEYWORDS, WEATHER_KEYWORDS, TYPHOON_KEYWORDS, EARTHQUAKE_KEYWORDS
+from .contexts.context_keywords import LOCATION_KEYWORDS, WEATHER_DATA_KEYWORDS, WEATHER_CONTEXT_KEYWORDS, \
+    TYPHOON_DATA_KEYWORDS, TYPHOON_CONTEXT_KEYWORDS, EARTHQUAKE_DATA_KEYWORDS, EARTHQUAKE_CONTEXT_KEYWORDS, \
+    GENERAL_CONTEXT_KEYWORDS, DIRECT_QUESTION_PATTERNS, CONTEXT_QUESTION_PATTERNS, HYBRID_QUESTION_PATTERNS
 from .contexts.prompt_template import PROMPT_TEMPLATE
 from .contexts.ph_locations import HARDCODED_LOCATIONS
 from collections import deque
@@ -19,7 +17,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaLLM
-from typing import List, Dict, Optional
+from typing import List, Optional, Tuple
 
 load_dotenv()
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
@@ -29,37 +27,126 @@ PDF_FILE = "DisasteAlertBot_Data_v1.pdf"
 PDF_PATH = os.path.join(BASE_DIR, "pdf", PDF_FILE)
 DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 os.makedirs(DB_DIR, exist_ok=True)
-
-MAX_HISTORY_LENGTH = 5
 TOP_K_CHUNKS = 5
-user_sessions: Dict[str, deque] = {}
+
+""" QUERY INTENT CLASSIFICATION """
+class QueryIntent:
+    DIRECT_DATA = "direct_data"
+    CONTEXT = "context"
+    HYBRID = "hybrid"
+    GENERAL = "general"
+
+def count_keywords_in_text(text: str, keywords: list) -> int:
+    text_lower = text.lower()
+    return sum(1 for keyword in keywords if keyword in text_lower)
+
+# Check if question mentions a specific disaster type
+def has_disaster_type(question: str) -> Tuple[bool, str]:
+    q_lower = question.lower()
+    
+    typhoon_words = ["typhoon", "bagyo", "tropical cyclone", "storm", "tcws"]
+    earthquake_words = ["earthquake", "lindol", "tremor", "aftershock", "quake"]
+    weather_words = ["weather", "panahon", "temperature", "rain", "ulan", "forecast"]
+    
+    if any(word in q_lower for word in typhoon_words):
+        return True, "typhoon"
+    if any(word in q_lower for word in earthquake_words):
+        return True, "earthquake"
+    if any(word in q_lower for word in weather_words):
+        return True, "weather"
+    
+    return False, None
+
+# Detect if question is very broad/vague
+def is_vague_question(question: str) -> bool:
+    q_lower = question.lower()
+    vague_indicators = [
+        len(question.split()) <= 4,  # Very short questions
+        any(phrase in q_lower for phrase in ["any", "anything", "what's up", "ano meron", "update"]),
+        question.strip().endswith("?") and len(question.split()) <= 3
+    ]
+    return any(vague_indicators)
+
+# classify the user's query intent to determine retrieval strategy
+def classify_query_intent(question: str) -> str:
+    print(f"[INTENT CLASSIFIER] Analyzing: {question}")
+    
+    q_lower = question.lower()
+    has_disaster, disaster_type = has_disaster_type(question)
+    
+    # Count keyword types
+    data_count = 0
+    context_count = 0
+    
+    if disaster_type == "weather":
+        data_count = count_keywords_in_text(q_lower, WEATHER_DATA_KEYWORDS)
+        context_count = count_keywords_in_text(q_lower, WEATHER_CONTEXT_KEYWORDS)
+    elif disaster_type == "typhoon":
+        data_count = count_keywords_in_text(q_lower, TYPHOON_DATA_KEYWORDS)
+        context_count = count_keywords_in_text(q_lower, TYPHOON_CONTEXT_KEYWORDS)
+    elif disaster_type == "earthquake":
+        data_count = count_keywords_in_text(q_lower, EARTHQUAKE_DATA_KEYWORDS)
+        context_count = count_keywords_in_text(q_lower, EARTHQUAKE_CONTEXT_KEYWORDS)
+    
+    # Check for general context keywords
+    general_context_count = count_keywords_in_text(q_lower, GENERAL_CONTEXT_KEYWORDS)
+    context_count += general_context_count
+    
+    # Check question patterns
+    has_direct_pattern = any(pattern in q_lower for pattern in DIRECT_QUESTION_PATTERNS)
+    has_context_pattern = any(pattern in q_lower for pattern in CONTEXT_QUESTION_PATTERNS)
+    has_hybrid_pattern = any(pattern in q_lower for pattern in HYBRID_QUESTION_PATTERNS)
+    
+    print(f"[INTENT CLASSIFIER] Disaster type: {disaster_type}, Data keywords: {data_count}, Context keywords: {context_count}")
+    print(f"[INTENT CLASSIFIER] Patterns - Direct: {has_direct_pattern}, Context: {has_context_pattern}, Hybrid: {has_hybrid_pattern}")
+    
+    # Classification logic
+    if not has_disaster and (is_vague_question(question) or general_context_count > 0):
+        print(f"[INTENT CLASSIFIER] Result: GENERAL_INQUIRY")
+        return QueryIntent.GENERAL
+    
+    # Direct data query: asks for specific metrics
+    if data_count >= 2 and context_count == 0 and has_direct_pattern:
+        print(f"[INTENT CLASSIFIER] Result: DIRECT_DATA_QUERY")
+        return QueryIntent.DIRECT_DATA
+    
+    # Context query: asks about impacts, news, situation
+    if context_count >= 1 and data_count == 0:
+        print(f"[INTENT CLASSIFIER] Result: CONTEXT_QUERY")
+        return QueryIntent.CONTEXT
+    
+    # Hybrid query: needs both data and context
+    if data_count > 0 and context_count > 0:
+        print(f"[INTENT CLASSIFIER] Result: HYBRID_QUERY")
+        return QueryIntent.HYBRID
+    
+    if has_hybrid_pattern:
+        print(f"[INTENT CLASSIFIER] Result: HYBRID_QUERY (by pattern)")
+        return QueryIntent.HYBRID
+    
+    # Default to general inquiry for ambiguous cases
+    print(f"[INTENT CLASSIFIER] Result: GENERAL_INQUIRY (default)")
+    return QueryIntent.GENERAL
 
 """ CONTEXT REINFORCEMENT """
-# Helper function: determines if real-time info is needed
-def needs_real_time_info(question: str) -> bool:
-    question_lower = question.lower()
-    return any(keyword in question_lower for keyword in CURRENT_INFO_KEYWORDS)
-
 # Helper function: determines if weather data is needed
 def needs_weather_data(question: str) -> bool:
     q_lower = question.lower()
-    has_current = any(kw in q_lower for kw in LOCATION_KEYWORDS)
-    has_weather = any(kw in q_lower for kw in WEATHER_KEYWORDS)
-    return has_current and has_weather
+    has_location = any(kw in q_lower for kw in LOCATION_KEYWORDS)
+    has_weather = any(kw in q_lower for kw in WEATHER_DATA_KEYWORDS + WEATHER_CONTEXT_KEYWORDS)
+    return has_location and has_weather or any(kw in q_lower for kw in ["weather", "panahon", "temperature"])
 
 # Helper function: determines if typhoon data is needed
 def needs_typhoon_data(question: str) -> bool:
     q_lower = question.lower()
-    has_current = any(kw in q_lower for kw in LOCATION_KEYWORDS)
-    has_typhoon = any(kw in q_lower for kw in TYPHOON_KEYWORDS)
-    return has_current and has_typhoon
+    typhoon_terms = ["typhoon", "bagyo", "tropical cyclone", "storm", "tcws", "signal"]
+    return any(term in q_lower for term in typhoon_terms)
 
 # Helper function: determines if earthquake data is needed
 def needs_earthquake_data(question: str) -> bool:
     q_lower = question.lower()
-    has_current = any(kw in q_lower for kw in LOCATION_KEYWORDS)
-    has_earthquake = any(kw in q_lower for kw in EARTHQUAKE_KEYWORDS)
-    return has_current and has_earthquake
+    earthquake_terms = ["earthquake", "lindol", "tremor", "aftershock", "quake", "seismic"]
+    return any(term in q_lower for term in earthquake_terms)
 
 # Geocode location
 def geocode_from_location(location: Optional[str]) -> Optional[tuple]:
@@ -293,7 +380,7 @@ def initialize_vector_stores():
 
     return pdf_store, web_store, serper_store, embeddings
 
-""" MAIN RAG MODEL LOGIC """
+""" ENHANCED RAG MODEL LOGIC WITH INTENT-BASED ROUTING """
 pdf_vector_store, web_vector_store, serper_vector_store, embeddings = initialize_vector_stores()
 llm = OllamaLLM(model="llama3.2:3b", temperature=0.6)
 
@@ -302,6 +389,11 @@ def retrieve_data(question: str, user_location: Optional[str] = None, k: int = 5
     if user_location:
         print(f"[RETRIEVAL] User location: {user_location}")
     
+    # Classify query intent
+    intent = classify_query_intent(question)
+    print(f"[RETRIEVAL] Query intent classified as: {intent}")
+    
+    # Collect relevant service documents
     service_docs = []
     
     if needs_weather_data(question):
@@ -322,75 +414,83 @@ def retrieve_data(question: str, user_location: Optional[str] = None, k: int = 5
         if earthquake_doc:
             service_docs.append(earthquake_doc)
     
-    if service_docs:
-        print(f"[RETRIEVAL] Retrieved {len(service_docs)} service documents")
+    # Route based on intent
+    if intent == QueryIntent.DIRECT_DATA:
+        # For direct data queries, prioritize services only
+        print(f"[RETRIEVAL] Strategy: service_only ({len(service_docs)} service docs)")
         pdf_docs = pdf_vector_store.similarity_search(question, k=2)
-        combined_docs = service_docs + pdf_docs
-        print(f"[RETRIEVAL] Strategy: service_priority ({len(service_docs)} service + {len(pdf_docs)} pdf)")
-        return combined_docs, "service_priority"
+        return service_docs + pdf_docs, "service_only"
     
-    is_current_query = needs_real_time_info(question)
-    print(f"[RETRIEVAL] Real-time query detected: {is_current_query}")
-    
-    if is_current_query:
-        print(f"[RETRIEVAL] Fetching real-time data from Serper...")
+    elif intent == QueryIntent.CONTEXT:
+        # For context queries, prioritize Serper with services as verification
+        print(f"[RETRIEVAL] Strategy: serper_primary (context query)")
         serper_docs = retrieve_realtime_docs(question, user_location=user_location)
         
         if serper_docs:
-            print(f"[RETRIEVAL] Retrieved {len(serper_docs)} results from Serper")
             for d in serper_docs:
                 d.metadata["source_type"] = "serper"
                 d.metadata["priority"] = "highest"
             
             pdf_docs = pdf_vector_store.similarity_search(question, k=2)
-            combined_docs = serper_docs + pdf_docs
-            
-            print(f"[RETRIEVAL] Strategy: serper_priority ({len(serper_docs)} serper + {len(pdf_docs)} pdf)")
-            return combined_docs, "serper_priority"
+            combined_docs = serper_docs + service_docs + pdf_docs
+            print(f"[RETRIEVAL] Retrieved: {len(serper_docs)} serper + {len(service_docs)} service + {len(pdf_docs)} pdf")
+            return combined_docs, "serper_primary"
         else:
-            print(f"[RETRIEVAL] Serper returned no results, falling back to PDF/Web")
+            # Fallback if Serper fails
+            print(f"[RETRIEVAL] Serper failed, using services + PDF")
+            pdf_docs = pdf_vector_store.similarity_search(question, k=3)
+            return service_docs + pdf_docs, "service_fallback"
     
-    pdf_results = pdf_vector_store.similarity_search_with_score(question, k=k)
-    pdf_docs = [doc for doc, score in pdf_results]
+    elif intent == QueryIntent.HYBRID:
+        # For hybrid queries, use both equally
+        print(f"[RETRIEVAL] Strategy: hybrid (both service and serper)")
+        serper_docs = retrieve_realtime_docs(question, user_location=user_location)
+        
+        if serper_docs:
+            for d in serper_docs:
+                d.metadata["source_type"] = "serper"
+                d.metadata["priority"] = "highest"
+        
+        pdf_docs = pdf_vector_store.similarity_search(question, k=2)
+        combined_docs = service_docs + (serper_docs or []) + pdf_docs
+        print(f"[RETRIEVAL] Retrieved: {len(service_docs)} service + {len(serper_docs or [])} serper + {len(pdf_docs)} pdf")
+        return combined_docs, "hybrid"
     
-    pdf_text_len = sum(len(d.page_content) for d in pdf_docs)
-    if pdf_text_len > 800:
-        print(f"[RETRIEVAL] Strategy: pdf_only (sufficient content: {pdf_text_len} chars)")
-        return pdf_docs, "pdf_only"
-    
-    combined_docs = pdf_docs.copy()
-    
-    if web_vector_store:
-        web_docs = web_vector_store.similarity_search(question, k=2)
-        combined_docs.extend(web_docs)
-        print(f"[RETRIEVAL] Strategy: pdf_and_web ({len(pdf_docs)} pdf + {len(web_docs)} web)")
-        return combined_docs, "pdf_and_web"
-    
-    print(f"[RETRIEVAL] Strategy: pdf_only (no web sources)")
-    return combined_docs, "pdf_only"
+    else:  # QueryIntent.GENERAL
+        # For general inquiries, comprehensive search
+        print(f"[RETRIEVAL] Strategy: comprehensive (general inquiry)")
+        serper_docs = retrieve_realtime_docs(question, user_location=user_location)
+        
+        if serper_docs:
+            for d in serper_docs:
+                d.metadata["source_type"] = "serper"
+                d.metadata["priority"] = "highest"
+        
+        # Check all services for general queries
+        if not service_docs:
+            # Try to fetch all services if none were detected
+            weather_doc = fetch_weather_service_data(user_location)
+            typhoon_doc = fetch_typhoon_service_data()
+            earthquake_doc = fetch_earthquake_service_data()
+            
+            if weather_doc:
+                service_docs.append(weather_doc)
+            if typhoon_doc:
+                service_docs.append(typhoon_doc)
+            if earthquake_doc:
+                service_docs.append(earthquake_doc)
+        
+        pdf_docs = pdf_vector_store.similarity_search(question, k=2)
+        combined_docs = (serper_docs or []) + service_docs + pdf_docs
+        print(f"[RETRIEVAL] Retrieved: {len(serper_docs or [])} serper + {len(service_docs)} service + {len(pdf_docs)} pdf")
+        return combined_docs, "comprehensive"
 
-def get_session_history(session_id: str) -> deque:
-    if session_id not in user_sessions:
-        user_sessions[session_id] = deque(maxlen=MAX_HISTORY_LENGTH)
-    return user_sessions[session_id]
-
-def ask_question(question: str, session_id: str = "default", user_location: Optional[str] = None) -> str:
-    print(f"\n[SESSION: {session_id}] User asked: {question}")
+def ask_question(question: str, user_location: Optional[str] = None) -> str:
+    print(f"\n[QUERY] User asked: {question}")
     if user_location:
-        print(f"[SESSION: {session_id}] User location: {user_location}")
+        print(f"[QUERY] User location: {user_location}")
     
-    chat_history = get_session_history(session_id)
-    
-    history_text = ""
-    if chat_history:
-        print(f"[CHAT HISTORY] Loading {len(chat_history)} previous exchanges:")
-        for idx, (q, a) in enumerate(list(chat_history), 1):
-            print(f"  {idx}. User: {q[:50]}...")
-            print(f"     Bot: {a[:50]}...")
-            history_text += f"User: {q}\nBot: {a}\n"
-    else:
-        print("[CHAT HISTORY] No previous history for this session")
-    
+    # Fresh context for each reload
     docs, strategy = retrieve_data(question, user_location=user_location, k=TOP_K_CHUNKS)
     print(f"[CONTEXT] Building context from {len(docs)} documents (strategy: {strategy})")
     
@@ -415,15 +515,14 @@ def ask_question(question: str, session_id: str = "default", user_location: Opti
     
     context = "\n\n".join(context_parts) or "No relevant context found."
     
-    prompt = PROMPT_TEMPLATE.format(chat_history=history_text, context=context, question=question)
+    # Build prompt without chat history
+    prompt = PROMPT_TEMPLATE.format(chat_history="", context=context, question=question)
     
     print(f"[GENERATING] Calling LLM...")
     result = llm.generate([prompt])
     answer = result.generations[0][0].text.strip()
     
-    chat_history.append((question, answer))
-    print(f"[RESPONSE] Generated answer ({len(answer)} chars)")
-    print(f"[CHAT HISTORY] Updated. Total exchanges in session: {len(chat_history)}\n")
+    print(f"[RESPONSE] Generated answer ({len(answer)} chars)\n")
     
     return answer
 
